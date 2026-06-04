@@ -27,19 +27,15 @@ const createGame = async (
   const app = await WgpuApp.create(canvas, size);
 
   // The worker pushes events up to the main thread over the Comlink callback the
-  // page handed in. onReady fires once with the adapter name only the worker knows;
-  // onStats streams the frame counters, throttled to stay well under one message
-  // per frame.
-  let reportedReady = false;
+  // page handed in. The adapter is known the moment create() returns, so report it
+  // once now; onStats then streams the frame counters, throttled to stay well under
+  // one message per frame.
+  events.onReady(app.adapter_info());
+
   let lastStatsPush = 0;
 
   function update() {
     app.update();
-
-    if (!reportedReady && app.ready()) {
-      reportedReady = true;
-      events.onReady(app.adapter_info());
-    }
 
     const now = performance.now();
     if (now - lastStatsPush > 250) {

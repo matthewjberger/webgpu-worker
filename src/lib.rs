@@ -95,10 +95,6 @@ impl WgpuApp {
         }
     }
 
-    pub fn ready(&self) -> bool {
-        true
-    }
-
     pub fn adapter_info(&self) -> AdapterInfo {
         AdapterInfo {
             adapter: self.gpu.adapter_name.clone(),
