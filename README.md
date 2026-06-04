@@ -42,10 +42,6 @@ just run         # build, optimize, and serve at http://localhost:5173
 
 Run `just` with no arguments to list every recipe. The wasm pipeline is a bare `cargo build` -> `wasm-bindgen --target web` -> `wasm-opt -Oz`.
 
-## Deployment
-
-Pushing to `main` builds the wasm module and the web bundle and publishes to GitHub Pages via [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
-
 ## License
 
 Dual-licensed under MIT or Apache-2.0, at your option.

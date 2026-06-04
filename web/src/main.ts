@@ -73,18 +73,28 @@ const initializeApp = async () => {
   let pendingZoom = 0;
   let dragging = false;
   let pointerMoved = 0;
+  let lastX = 0;
+  let lastY = 0;
 
   canvas.addEventListener("pointerdown", (event) => {
     dragging = true;
     pointerMoved = 0;
+    lastX = event.clientX;
+    lastY = event.clientY;
     canvas.setPointerCapture(event.pointerId);
     canvas.style.cursor = "grabbing";
   });
+  // Track deltas from clientX/clientY rather than movementX/movementY, which is
+  // unreliable for touch pointers and made touch drags barely move.
   canvas.addEventListener("pointermove", (event) => {
     if (!dragging) return;
-    pointerMoved += Math.abs(event.movementX) + Math.abs(event.movementY);
-    pendingYaw += event.movementX;
-    pendingPitch += event.movementY;
+    const dx = event.clientX - lastX;
+    const dy = event.clientY - lastY;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    pointerMoved += Math.abs(dx) + Math.abs(dy);
+    pendingYaw += dx;
+    pendingPitch += dy;
   });
   canvas.addEventListener("pointercancel", (event) => {
     dragging = false;
