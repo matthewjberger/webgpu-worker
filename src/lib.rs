@@ -235,7 +235,7 @@ impl Gpu {
             .formats
             .iter()
             .copied()
-            .find(|format| !format.is_srgb())
+            .find(|format| format.is_srgb())
             .unwrap_or(surface_capabilities.formats[0]);
 
         let surface_config = wgpu::SurfaceConfiguration {
@@ -620,11 +620,19 @@ fn vertex_main(input: VertexInput) -> VertexOutput {
     return output;
 }
 
+fn srgb_to_linear(color: vec3<f32>) -> vec3<f32> {
+    let cutoff = color <= vec3<f32>(0.04045);
+    let lower = color / 12.92;
+    let higher = pow((color + 0.055) / 1.055, vec3<f32>(2.4));
+    return select(higher, lower, cutoff);
+}
+
 @fragment
 fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let light_direction = normalize(vec3<f32>(0.4, 0.8, 0.6));
     let diffuse = max(dot(normalize(input.world_normal), light_direction), 0.0);
     let shade = 0.25 + 0.75 * diffuse;
-    return vec4<f32>(ubo.tint.rgb * shade, 1.0);
+    let base_color = srgb_to_linear(ubo.tint.rgb);
+    return vec4<f32>(base_color * shade, 1.0);
 }
 ";
