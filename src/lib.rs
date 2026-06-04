@@ -102,6 +102,10 @@ impl WgpuApp {
         }
     }
 
+    pub fn pick(&mut self, x: f32, y: f32) -> Option<PickResult> {
+        self.scene.pick(x, y)
+    }
+
     pub fn context(&self) -> String {
         let global = js_sys::global();
         js_sys::Reflect::get(&global, &JsValue::from_str("constructor"))
@@ -293,6 +297,9 @@ struct Scene {
     uniform: UniformBinding,
     pipeline: wgpu::RenderPipeline,
     spin: f32,
+    view_proj: nalgebra_glm::Mat4,
+    model: nalgebra_glm::Mat4,
+    hit_point: [f32; 4],
 }
 
 impl Scene {
@@ -320,6 +327,9 @@ impl Scene {
             uniform,
             pipeline,
             spin: 0.0,
+            view_proj: nalgebra_glm::Mat4::identity(),
+            model: nalgebra_glm::Mat4::identity(),
+            hit_point: [0.0, 0.0, 0.0, 0.0],
         }
     }
 
@@ -343,14 +353,45 @@ impl Scene {
         let model = nalgebra_glm::rotation(self.spin, &nalgebra_glm::vec3(0.0, 1.0, 0.0))
             * nalgebra_glm::rotation(self.spin * 0.4, &nalgebra_glm::vec3(1.0, 0.0, 0.0));
 
+        let view_proj = projection * view;
+        self.view_proj = view_proj;
+        self.model = model;
+
         self.uniform.update_buffer(
             queue,
             UniformBuffer {
-                mvp: projection * view * model,
+                mvp: view_proj * model,
                 model,
                 tint: controls.tint,
+                hit_point: self.hit_point,
             },
         );
+    }
+
+    fn pick(&mut self, ndc_x: f32, ndc_y: f32) -> Option<PickResult> {
+        let inverse_view_proj = nalgebra_glm::inverse(&self.view_proj);
+        let near = inverse_view_proj * nalgebra_glm::vec4(ndc_x, ndc_y, 0.0, 1.0);
+        let far = inverse_view_proj * nalgebra_glm::vec4(ndc_x, ndc_y, 1.0, 1.0);
+        let near = nalgebra_glm::vec3(near.x / near.w, near.y / near.w, near.z / near.w);
+        let far = nalgebra_glm::vec3(far.x / far.w, far.y / far.w, far.z / far.w);
+
+        let inverse_model = nalgebra_glm::inverse(&self.model);
+        let origin = inverse_model * nalgebra_glm::vec4(near.x, near.y, near.z, 1.0);
+        let origin = nalgebra_glm::vec3(origin.x, origin.y, origin.z);
+        let direction = far - near;
+        let direction =
+            inverse_model * nalgebra_glm::vec4(direction.x, direction.y, direction.z, 0.0);
+        let direction =
+            nalgebra_glm::normalize(&nalgebra_glm::vec3(direction.x, direction.y, direction.z));
+
+        let (point, face) = ray_cube_hit(origin, direction, 0.8)?;
+        self.hit_point = [point.x, point.y, point.z, 1.0];
+        Some(PickResult {
+            face: face.to_string(),
+            x: point.x,
+            y: point.y,
+            z: point.z,
+        })
     }
 
     fn render<'pass>(&'pass self, render_pass: &mut wgpu::RenderPass<'pass>) {
@@ -448,6 +489,7 @@ struct UniformBuffer {
     mvp: nalgebra_glm::Mat4,
     model: nalgebra_glm::Mat4,
     tint: [f32; 4],
+    hit_point: [f32; 4],
 }
 
 impl Default for UniformBuffer {
@@ -456,6 +498,7 @@ impl Default for UniformBuffer {
             mvp: nalgebra_glm::Mat4::identity(),
             model: nalgebra_glm::Mat4::identity(),
             tint: [0.3, 0.5, 0.9, 1.0],
+            hit_point: [0.0, 0.0, 0.0, 0.0],
         }
     }
 }
@@ -582,6 +625,69 @@ pub struct AdapterInfo {
     backend: String,
 }
 
+#[derive(Clone, Serialize, Deserialize, tsify_next::Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct PickResult {
+    face: String,
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+fn ray_cube_hit(
+    origin: nalgebra_glm::Vec3,
+    direction: nalgebra_glm::Vec3,
+    half: f32,
+) -> Option<(nalgebra_glm::Vec3, &'static str)> {
+    let mut t_min = f32::NEG_INFINITY;
+    let mut t_max = f32::INFINITY;
+    let mut axis = 0;
+    let mut sign = -1.0;
+    for index in 0..3 {
+        let o = origin[index];
+        let d = direction[index];
+        if d.abs() < 1e-6 {
+            if o < -half || o > half {
+                return None;
+            }
+            continue;
+        }
+        let inverse = 1.0 / d;
+        let mut t1 = (-half - o) * inverse;
+        let mut t2 = (half - o) * inverse;
+        let mut entry_sign = -1.0;
+        if t1 > t2 {
+            std::mem::swap(&mut t1, &mut t2);
+            entry_sign = 1.0;
+        }
+        if t1 > t_min {
+            t_min = t1;
+            axis = index;
+            sign = entry_sign;
+        }
+        if t2 < t_max {
+            t_max = t2;
+        }
+        if t_min > t_max {
+            return None;
+        }
+    }
+    if t_max < 0.0 {
+        return None;
+    }
+    let t = if t_min >= 0.0 { t_min } else { t_max };
+    let point = origin + direction * t;
+    let face = match (axis, sign > 0.0) {
+        (0, true) => "+X",
+        (0, false) => "-X",
+        (1, true) => "+Y",
+        (1, false) => "-Y",
+        (2, true) => "+Z",
+        _ => "-Z",
+    };
+    Some((point, face))
+}
+
 fn build_cube(half: f32) -> (Vec<Vertex>, Vec<u32>) {
     let faces: [([f32; 3], [[f32; 3]; 4]); 6] = [
         (
@@ -661,6 +767,7 @@ struct Uniform {
     mvp: mat4x4<f32>,
     model: mat4x4<f32>,
     tint: vec4<f32>,
+    hit_point: vec4<f32>,
 };
 
 @group(0) @binding(0)
@@ -674,6 +781,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) world_normal: vec3<f32>,
+    @location(1) local_position: vec3<f32>,
 };
 
 @vertex
@@ -681,6 +789,7 @@ fn vertex_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.clip_position = ubo.mvp * input.position;
     output.world_normal = (ubo.model * vec4<f32>(input.normal.xyz, 0.0)).xyz;
+    output.local_position = input.position.xyz;
     return output;
 }
 
@@ -703,7 +812,14 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let light_direction = normalize(vec3<f32>(0.4, 0.8, 0.6));
     let diffuse = max(dot(normalize(input.world_normal), light_direction), 0.0);
     let shade = 0.25 + 0.75 * diffuse;
-    let base_color = srgb_to_linear(ubo.tint.rgb);
-    return vec4<f32>(linear_to_srgb(base_color * shade), 1.0);
+    var color = srgb_to_linear(ubo.tint.rgb) * shade;
+
+    if (ubo.hit_point.w > 0.5) {
+        let marker = srgb_to_linear(vec3<f32>(1.0, 0.5, 0.1));
+        let edge = smoothstep(0.06, 0.12, distance(input.local_position, ubo.hit_point.xyz));
+        color = mix(marker, color, edge);
+    }
+
+    return vec4<f32>(linear_to_srgb(color), 1.0);
 }
 ";

@@ -2,6 +2,7 @@ import init, {
   WgpuApp,
   type AdapterInfo,
   type CanvasSize,
+  type PickResult,
   type Stats,
 } from "./wasm/webgpu_worker.js";
 
@@ -56,6 +57,7 @@ const createGame = async (
     orbit: (deltaYaw: number, deltaPitch: number) =>
       app.orbit(deltaYaw, deltaPitch),
     zoom: (amount: number) => app.zoom(amount),
+    pick: (x: number, y: number) => app.pick(x, y),
     stats: () => app.stats(),
     context: () => app.context(),
   });
@@ -78,6 +80,7 @@ export type GameApi = {
   setColor: (red: number, green: number, blue: number) => void;
   orbit: (deltaYaw: number, deltaPitch: number) => void;
   zoom: (amount: number) => void;
+  pick: (x: number, y: number) => PickResult | undefined;
   stats: () => Stats;
   context: () => string;
 };
