@@ -2,7 +2,7 @@
 
 A from-scratch [wgpu](https://wgpu.rs) app that runs in a web worker via WebAssembly. No `winit`, and no graphics code on the main thread: the worker owns an `OffscreenCanvas`, drives the render loop with `requestAnimationFrame`, and renders through WebGPU. The main thread only transfers the canvas and forwards events over [Comlink](https://github.com/GoogleChromeLabs/comlink).
 
-This is the raw-wgpu counterpart to [bevy-worker](https://github.com/matthewjberger/bevy-worker): same worker architecture and build pipeline, but a hand-written renderer instead of an engine.
+This is the raw-wgpu counterpart to [bevy-worker](https://github.com/matthewjberger/bevy-worker): same worker architecture and build pipeline, but a hand-written renderer instead of an engine. The worker approach follows Nick Babcock's [write-up on running a Bevy app off the main thread](https://nickb.dev/blog/a-bevy-app-entirely-off-the-main-thread/), and the build pipeline follows his [post on deconstructing wasm-pack](https://nickb.dev/blog/life-after-wasm-pack-an-opinionated-deconstruction/).
 
 ## Live demo
 
@@ -19,7 +19,7 @@ The page renders a spinning, lit 3D cube and a control panel that demonstrates t
 ## How it works
 
 - `src/lib.rs` exposes a `WgpuApp` (`create` / `update` / `resize` / control methods) through `wasm-bindgen` (`--target web`). `create` is async because `request_adapter` and `request_device` are async, so it returns a `Promise` the worker awaits.
-- The surface comes straight from the transferred canvas via `wgpu::SurfaceTarget::OffscreenCanvas`. Because we never route through `winit`, there is no `raw-window-handle` plumbing and no `unsafe` Send wrapper; wgpu supports the offscreen canvas as a surface target directly.
+- The surface comes straight from the transferred canvas via `wgpu::SurfaceTarget::OffscreenCanvas`, so `instance.create_surface(...)` just works. Because nothing routes through `winit` or `raw-window-handle`, there is no `unsafe impl Send + Sync` and no custom window-handle wrapper. That plumbing in [bevy-worker](https://github.com/matthewjberger/bevy-worker) exists only to satisfy Bevy's winit-shaped `Window` layer, whose `RawHandleWrapper` demands a `Send + Sync` handle the `OffscreenCanvas` doesn't provide. Going straight to wgpu removes the requirement entirely.
 - The renderer is a plain wgpu setup: instance, surface, adapter, device, a depth texture, one uniform buffer (MVP, model matrix, tint), and a pipeline from inline WGSL that does Lambert shading.
 - `web/src/worker.ts` initializes the module explicitly with `init({ module_or_path })` (a `?url` import, no `vite-plugin-wasm`) and drives `app.update()` from `requestAnimationFrame`.
 - `web/src/main.ts` transfers the canvas with `Comlink.transfer` and forwards control and resize events. The UI is plain HTML and CSS.
