@@ -2,7 +2,11 @@
 
 A from-scratch [wgpu](https://wgpu.rs) app that runs in a web worker via WebAssembly. No `winit`, and no graphics code on the main thread: the worker owns an `OffscreenCanvas`, drives the render loop with `requestAnimationFrame`, and renders through WebGPU. The main thread only transfers the canvas and forwards events over [Comlink](https://github.com/GoogleChromeLabs/comlink).
 
+![A lit, spinning cube rendered by wgpu inside a web worker, with the control panel reporting the worker scope, fps, and a picked face marker.](docs/screenshot.png)
+
 This is the raw-wgpu counterpart to [bevy-worker](https://github.com/matthewjberger/bevy-worker): same worker architecture and build pipeline, but a wgpu renderer instead of an engine. The worker approach follows Nick Babcock's [write-up on running a Bevy app off the main thread](https://nickb.dev/blog/a-bevy-app-entirely-off-the-main-thread/), and the build pipeline follows his [post on deconstructing wasm-pack](https://nickb.dev/blog/life-after-wasm-pack-an-opinionated-deconstruction/).
+
+For an all-Rust take on this same renderer, see [webgpu-worker-leptos](https://github.com/matthewjberger/webgpu-worker-leptos): it swaps the TypeScript frontend and Comlink for a [Leptos](https://leptos.dev) page and a Rust web worker that share their message types through a `protocol` crate.
 
 ## Live demo
 
