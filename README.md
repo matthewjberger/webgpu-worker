@@ -6,7 +6,7 @@ A from-scratch [wgpu](https://wgpu.rs) app that runs in a web worker via WebAsse
 
 This is the raw-wgpu counterpart to [bevy-worker](https://github.com/matthewjberger/bevy-worker): same worker architecture and build pipeline, but a wgpu renderer instead of an engine. The worker approach follows Nick Babcock's [write-up on running a Bevy app off the main thread](https://nickb.dev/blog/a-bevy-app-entirely-off-the-main-thread/), and the build pipeline follows his [post on deconstructing wasm-pack](https://nickb.dev/blog/life-after-wasm-pack-an-opinionated-deconstruction/).
 
-For an all-Rust take on this same renderer, see [webgpu-worker-leptos](https://github.com/matthewjberger/webgpu-worker-leptos): it swaps the TypeScript frontend and Comlink for a [Leptos](https://leptos.dev) page and a Rust web worker that share their message types through a `protocol` crate.
+For an all-Rust take on this same renderer, see [webgpu-worker-leptos](https://github.com/matthewjberger/webgpu-worker-leptos): it swaps the TypeScript frontend and Comlink for a [Leptos](https://leptos.dev) page and a Rust web worker that share their message types through a `protocol` crate. [bevy-worker-leptos](https://github.com/matthewjberger/bevy-worker-leptos) is that same all-Rust frontend wrapped around the full Bevy engine instead of a hand-written renderer.
 
 ## Live demo
 
