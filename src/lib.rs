@@ -99,19 +99,12 @@ impl WgpuApp {
         let surface_texture = match self.gpu.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
             | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Outdated => {
+            _ => {
                 self.gpu
                     .surface
                     .configure(&self.gpu.device, &self.gpu.surface_config);
-                match self.gpu.surface.get_current_texture() {
-                    wgpu::CurrentSurfaceTexture::Success(frame)
-                    | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-                    other => {
-                        panic!("failed to acquire surface texture after reconfigure: {other:?}")
-                    }
-                }
+                return;
             }
-            other => panic!("failed to acquire surface texture: {other:?}"),
         };
 
         let view = surface_texture
