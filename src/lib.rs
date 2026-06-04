@@ -11,6 +11,7 @@ pub struct WgpuApp {
     depth_view: wgpu::TextureView,
     scene: Scene,
     controls: Controls,
+    camera: OrbitCamera,
     stats: FrameStats,
     last_frame: Instant,
 }
@@ -32,6 +33,7 @@ impl WgpuApp {
             depth_view,
             scene,
             controls: Controls::default(),
+            camera: OrbitCamera::default(),
             stats: FrameStats::default(),
             last_frame: Instant::now(),
         }
@@ -56,6 +58,7 @@ impl WgpuApp {
             self.gpu.aspect_ratio(),
             delta_time,
             &self.controls,
+            &self.camera,
         );
         self.render();
     }
@@ -73,6 +76,16 @@ impl WgpuApp {
 
     pub fn set_color(&mut self, red: f32, green: f32, blue: f32) {
         self.controls.tint = [red, green, blue, 1.0];
+    }
+
+    pub fn orbit(&mut self, delta_yaw: f32, delta_pitch: f32) {
+        self.camera.yaw -= delta_yaw * ORBIT_SENSITIVITY;
+        self.camera.pitch =
+            (self.camera.pitch + delta_pitch * ORBIT_SENSITIVITY).clamp(-PITCH_LIMIT, PITCH_LIMIT);
+    }
+
+    pub fn zoom(&mut self, amount: f32) {
+        self.camera.distance = (self.camera.distance + amount * ZOOM_SENSITIVITY).clamp(1.5, 20.0);
     }
 
     pub fn stats(&self) -> Stats {
@@ -303,13 +316,14 @@ impl Scene {
         aspect_ratio: f32,
         delta_time: f32,
         controls: &Controls,
+        camera: &OrbitCamera,
     ) {
         self.spin += controls.speed * delta_time;
 
         let projection =
             nalgebra_glm::perspective_lh_zo(aspect_ratio, 60_f32.to_radians(), 0.1, 100.0);
         let view = nalgebra_glm::look_at_lh(
-            &nalgebra_glm::vec3(0.0, 0.0, 3.0),
+            &camera.eye(),
             &nalgebra_glm::vec3(0.0, 0.0, 0.0),
             &nalgebra_glm::vec3(0.0, 1.0, 0.0),
         );
@@ -479,6 +493,36 @@ impl UniformBinding {
 
     fn update_buffer(&self, queue: &wgpu::Queue, uniform: UniformBuffer) {
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[uniform]));
+    }
+}
+
+const ORBIT_SENSITIVITY: f32 = 0.005;
+const ZOOM_SENSITIVITY: f32 = 0.01;
+const PITCH_LIMIT: f32 = 1.5;
+
+struct OrbitCamera {
+    yaw: f32,
+    pitch: f32,
+    distance: f32,
+}
+
+impl Default for OrbitCamera {
+    fn default() -> Self {
+        Self {
+            yaw: 0.0,
+            pitch: 0.0,
+            distance: 3.0,
+        }
+    }
+}
+
+impl OrbitCamera {
+    fn eye(&self) -> nalgebra_glm::Vec3 {
+        nalgebra_glm::vec3(
+            self.distance * self.pitch.cos() * self.yaw.sin(),
+            self.distance * self.pitch.sin(),
+            self.distance * self.pitch.cos() * self.yaw.cos(),
+        )
     }
 }
 
