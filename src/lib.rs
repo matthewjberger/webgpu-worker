@@ -79,7 +79,7 @@ impl WgpuApp {
     }
 
     pub fn orbit(&mut self, delta_yaw: f32, delta_pitch: f32) {
-        self.camera.yaw -= delta_yaw * ORBIT_SENSITIVITY;
+        self.camera.yaw += delta_yaw * ORBIT_SENSITIVITY;
         self.camera.pitch =
             (self.camera.pitch + delta_pitch * ORBIT_SENSITIVITY).clamp(-PITCH_LIMIT, PITCH_LIMIT);
     }
@@ -149,9 +149,9 @@ impl WgpuApp {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.05,
-                            g: 0.05,
-                            b: 0.07,
+                            r: 43.0 / 255.0,
+                            g: 44.0 / 255.0,
+                            b: 47.0 / 255.0,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -248,7 +248,7 @@ impl Gpu {
             .formats
             .iter()
             .copied()
-            .find(|format| format.is_srgb())
+            .find(|format| !format.is_srgb())
             .unwrap_or(surface_capabilities.formats[0]);
 
         let surface_config = wgpu::SurfaceConfiguration {
@@ -671,12 +671,19 @@ fn srgb_to_linear(color: vec3<f32>) -> vec3<f32> {
     return select(higher, lower, cutoff);
 }
 
+fn linear_to_srgb(color: vec3<f32>) -> vec3<f32> {
+    let cutoff = color <= vec3<f32>(0.0031308);
+    let lower = color * 12.92;
+    let higher = 1.055 * pow(color, vec3<f32>(1.0 / 2.4)) - 0.055;
+    return select(higher, lower, cutoff);
+}
+
 @fragment
 fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let light_direction = normalize(vec3<f32>(0.4, 0.8, 0.6));
     let diffuse = max(dot(normalize(input.world_normal), light_direction), 0.0);
     let shade = 0.25 + 0.75 * diffuse;
     let base_color = srgb_to_linear(ubo.tint.rgb);
-    return vec4<f32>(base_color * shade, 1.0);
+    return vec4<f32>(linear_to_srgb(base_color * shade), 1.0);
 }
 ";
