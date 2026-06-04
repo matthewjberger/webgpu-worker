@@ -1,5 +1,6 @@
 import init, {
   WgpuApp,
+  type AdapterInfo,
   type CanvasSize,
   type Stats,
 } from "./wasm/webgpu_worker.js";
@@ -13,7 +14,11 @@ import { expose, proxy } from "comlink";
 
 const initialized = init({ module_or_path: wasmPath });
 
-const createGame = async (canvas: OffscreenCanvas, size: CanvasSize) => {
+const createGame = async (
+  canvas: OffscreenCanvas,
+  size: CanvasSize,
+  events: EventSink,
+) => {
   await initialized;
 
   // request_adapter / request_device are async, so the constructor is an async
@@ -21,10 +26,27 @@ const createGame = async (canvas: OffscreenCanvas, size: CanvasSize) => {
   // wgpu takes the transferred OffscreenCanvas as a surface target directly.
   const app = await WgpuApp.create(canvas, size);
 
-  // Nothing drives the render loop for us, so requestAnimationFrame in the worker
-  // is the loop.
+  // The worker pushes events up to the main thread over the Comlink callback the
+  // page handed in. onReady fires once with the adapter name only the worker knows;
+  // onStats streams the frame counters, throttled to stay well under one message
+  // per frame.
+  let reportedReady = false;
+  let lastStatsPush = 0;
+
   function update() {
     app.update();
+
+    if (!reportedReady && app.ready()) {
+      reportedReady = true;
+      events.onReady(app.adapter_info());
+    }
+
+    const now = performance.now();
+    if (now - lastStatsPush > 250) {
+      lastStatsPush = now;
+      events.onStats(app.stats());
+    }
+
     requestAnimationFrame(update);
   }
   requestAnimationFrame(update);
@@ -46,6 +68,14 @@ const createGame = async (canvas: OffscreenCanvas, size: CanvasSize) => {
 // The local shape the worker implements. Comlink.wrap<WorkerApi> on the main
 // thread applies Remote<> over this, turning each method into a Promise-returning
 // proxy call, so we must NOT wrap it here.
+// The main thread implements these and passes them in (wrapped with Comlink.proxy);
+// the worker calls them to push events up. This is the worker -> main direction,
+// the counterpart to the main -> worker calls on GameApi.
+export type EventSink = {
+  onReady: (info: AdapterInfo) => void;
+  onStats: (stats: Stats) => void;
+};
+
 export type GameApi = {
   resize: (size: CanvasSize) => void;
   setSpeed: (speed: number) => void;
@@ -57,7 +87,11 @@ export type GameApi = {
 };
 
 export type WorkerApi = {
-  createGame: (canvas: OffscreenCanvas, size: CanvasSize) => Promise<GameApi>;
+  createGame: (
+    canvas: OffscreenCanvas,
+    size: CanvasSize,
+    events: EventSink,
+  ) => Promise<GameApi>;
 };
 
 expose({ createGame } satisfies WorkerApi);

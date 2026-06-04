@@ -95,6 +95,17 @@ impl WgpuApp {
         }
     }
 
+    pub fn ready(&self) -> bool {
+        true
+    }
+
+    pub fn adapter_info(&self) -> AdapterInfo {
+        AdapterInfo {
+            adapter: self.gpu.adapter_name.clone(),
+            backend: self.gpu.backend.clone(),
+        }
+    }
+
     pub fn context(&self) -> String {
         let global = js_sys::global();
         js_sys::Reflect::get(&global, &JsValue::from_str("constructor"))
@@ -184,6 +195,8 @@ struct Gpu {
     queue: wgpu::Queue,
     surface_config: wgpu::SurfaceConfiguration,
     surface_format: wgpu::TextureFormat,
+    adapter_name: String,
+    backend: String,
 }
 
 impl Gpu {
@@ -231,6 +244,8 @@ impl Gpu {
             .await
             .expect("failed to request adapter");
 
+        let adapter_info = adapter.get_info();
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("device"),
@@ -269,6 +284,8 @@ impl Gpu {
             queue,
             surface_config,
             surface_format,
+            adapter_name: adapter_info.name,
+            backend: format!("{:?}", adapter_info.backend),
         }
     }
 }
@@ -560,6 +577,13 @@ pub struct CanvasSize {
 pub struct Stats {
     frames: f64,
     fps: f32,
+}
+
+#[derive(Clone, Serialize, Deserialize, tsify_next::Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct AdapterInfo {
+    adapter: String,
+    backend: String,
 }
 
 fn build_cube(half: f32) -> (Vec<Vertex>, Vec<u32>) {
